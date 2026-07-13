@@ -1,0 +1,382 @@
+<!-- index.html -->
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maze Explorer — 네온 미로 탐색기</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <header>
+            <div class="logo-container">
+                <div class="logo-icon"></div>
+                <h1>MAZE EXPLORER</h1>
+            </div>
+            <p>실시간 미로 생성 및 탐색 경로 시각화 시스템</p>
+        </header>
+
+        <main class="main-content">
+            <aside class="panel">
+                <h2 class="panel-title">컨트롤 패널</h2>
+                
+                <div class="control-group">
+                    <label class="control-label" for="rows">행 크기 (Rows)</label>
+                    <div class="input-row">
+                        <div class="number-input-wrapper">
+                            <input type="number" id="rows" value="10" min="2" max="30">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label class="control-label" for="cols">열 크기 (Columns)</label>
+                    <div class="input-row">
+                        <div class="number-input-wrapper">
+                            <input type="number" id="cols" value="10" min="2" max="30">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="btn-container">
+                    <button class="btn-primary" id="btn-generate" onclick="loadMaze()">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+                        미로 생성하기
+                    </button>
+                    <button class="btn-secondary" id="btn-solve" onclick="loadSolution()" disabled>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                        해결 경로 탐색
+                    </button>
+                </div>
+
+                <div class="status-card">
+                    <div class="status-row">
+                        <span class="status-label">진행 상태</span>
+                        <div class="status-value status-idle" id="status-container">
+                            <span class="status-indicator"></span>
+                            <span id="status-text">준비 완료</span>
+                        </div>
+                    </div>
+                    <div class="status-row">
+                        <span class="status-label">미로 면적</span>
+                        <span class="status-value stats-value-mono" id="stat-size">0 x 0</span>
+                    </div>
+                    <div class="status-row">
+                        <span class="status-label">최적 경로</span>
+                        <span class="status-value stats-value-mono" id="stat-path">-</span>
+                    </div>
+                </div>
+            </aside>
+
+            <section class="panel maze-panel">
+                <div class="maze-wrapper" id="maze-wrapper">
+                    <canvas id="canvas"></canvas>
+                </div>
+            </section>
+        </main>
+        
+        <footer>
+            <p>&copy; 2026 Maze Explorer. Built with modern HSL Cyber-Glow Aesthetics.</p>
+        </footer>
+    </div>
+
+    <script>
+        const BASE = "http://localhost:8000"
+        let CELL = 40  // Dynamic pixel size for each cell
+        const PADDING = 8  // Padding around maze to prevent clipping borders/shadows
+        const canvas = document.getElementById("canvas")
+        const ctx = canvas.getContext("2d")
+        
+        // DOM Elements
+        const rowsInput = document.getElementById("rows")
+        const colsInput = document.getElementById("cols")
+        const btnGenerate = document.getElementById("btn-generate")
+        const btnSolve = document.getElementById("btn-solve")
+        const statusContainer = document.getElementById("status-container")
+        const statusText = document.getElementById("status-text")
+        const statSize = document.getElementById("stat-size")
+        const statPath = document.getElementById("stat-path")
+
+        let currentGrid = null
+        let isAnimating = false
+        let animationId = null
+
+        function updateStatus(state, text) {
+            // state must be one of: 'idle', 'generated', 'solved', 'solving'
+            statusContainer.className = `status-value status-${state}`;
+            statusText.innerText = text;
+        }
+
+        async function loadMaze() {
+            if (isAnimating) {
+                cancelAnimationFrame(animationId);
+                isAnimating = false;
+            }
+
+            const rows = rowsInput.value
+            const cols = colsInput.value
+
+            btnGenerate.disabled = true
+            btnSolve.disabled = true
+            updateStatus("solving", "미로 생성 중...")
+
+            try {
+                const res = await fetch(`${BASE}/maze?rows=${rows}&cols=${cols}`)
+                const { grid } = await res.json()
+                currentGrid = grid
+                
+                drawMaze(grid)
+                
+                updateStatus("generated", "미로 생성 완료")
+                statSize.innerText = `${rows} x ${cols}`
+                statPath.innerText = "-"
+                
+                btnGenerate.disabled = false
+                btnSolve.disabled = false
+            } catch (e) {
+                console.error(e)
+                updateStatus("idle", "연결 실패 (서버 확인)")
+                btnGenerate.disabled = false
+            }
+        }
+
+        async function loadSolution() {
+            if (!currentGrid || isAnimating) return
+            const rows = currentGrid.length
+            const cols = currentGrid[0].length
+
+            updateStatus("solving", "경로 요청 중...")
+
+            try {
+                const res = await fetch(`${BASE}/solve?rows=${rows}&cols=${cols}`)
+                const { path } = await res.json()
+                
+                animatePath(path)
+            } catch (e) {
+                console.error(e)
+                updateStatus("generated", "경로 조회 실패")
+            }
+        }
+
+        function drawMaze(grid) {
+            const rows = grid.length
+            const cols = grid[0].length
+            
+            // Dynamic cell size to fit beautifully
+            const maxDimension = Math.max(rows, cols)
+            CELL = Math.floor(Math.min(560 / maxDimension, 48))
+            CELL = Math.max(16, CELL)
+
+            canvas.width = cols * CELL + PADDING * 2
+            canvas.height = rows * CELL + PADDING * 2
+
+            // 1. Draw base obsidian background
+            ctx.fillStyle = "#0c0f16"
+            ctx.fillRect(0, 0, canvas.width, canvas.height)
+
+            // Save state and translate for padding so borders/glows are not clipped
+            ctx.save()
+            ctx.translate(PADDING, PADDING)
+
+            // 2. Draw subtle dots at intersections
+            ctx.fillStyle = "rgba(255, 255, 255, 0.04)"
+            for (let r = 0; r <= rows; r++) {
+                for (let c = 0; c <= cols; c++) {
+                    ctx.beginPath()
+                    ctx.arc(c * CELL, r * CELL, 1, 0, 2 * Math.PI)
+                    ctx.fill()
+                }
+            }
+
+            // 3. Draw maze walls with neon cyan glow
+            ctx.strokeStyle = "rgba(0, 240, 255, 0.9)"
+            ctx.lineWidth = Math.max(2, CELL * 0.08)
+            ctx.lineCap = "round"
+            ctx.shadowColor = "rgba(0, 240, 255, 0.55)"
+            ctx.shadowBlur = Math.max(4, CELL * 0.12)
+
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    const x = c * CELL
+                    const y = r * CELL
+                    const cell = grid[r][c]
+
+                    if (cell.top) { ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + CELL, y); ctx.stroke() }
+                    if (cell.right) { ctx.beginPath(); ctx.moveTo(x + CELL, y); ctx.lineTo(x + CELL, y + CELL); ctx.stroke() }
+                    if (cell.bottom) { ctx.beginPath(); ctx.moveTo(x, y + CELL); ctx.lineTo(x + CELL, y + CELL); ctx.stroke() }
+                    if (cell.left) { ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + CELL); ctx.stroke() }
+                }
+            }
+
+            // Reset shadows for next elements
+            ctx.shadowBlur = 0
+
+            // 4. Draw Entrance & Exit
+            drawStartEnd(rows, cols)
+
+            // Restore state
+            ctx.restore()
+        }
+
+        function drawStartEnd(rows, cols) {
+            const padding = CELL * 0.25
+
+            // Start Indicator (Neon Green)
+            ctx.shadowColor = "rgba(57, 255, 20, 0.7)"
+            ctx.shadowBlur = 8
+            ctx.fillStyle = "rgba(57, 255, 20, 0.2)"
+            ctx.strokeStyle = "#39ff14"
+            ctx.lineWidth = Math.max(2, CELL * 0.05)
+            ctx.beginPath()
+            ctx.arc(CELL / 2, CELL / 2, CELL * 0.22, 0, 2 * Math.PI)
+            ctx.fill()
+            ctx.stroke()
+
+            // End Indicator (Neon Purple)
+            ctx.shadowColor = "rgba(189, 0, 255, 0.7)"
+            ctx.shadowBlur = 8
+            ctx.fillStyle = "rgba(189, 0, 255, 0.2)"
+            ctx.strokeStyle = "#bd00ff"
+            ctx.lineWidth = Math.max(2, CELL * 0.05)
+            ctx.beginPath()
+            ctx.arc((cols - 0.5) * CELL, (rows - 0.5) * CELL, CELL * 0.22, 0, 2 * Math.PI)
+            ctx.fill()
+            ctx.stroke()
+
+            ctx.shadowBlur = 0
+        }
+
+        function animatePath(path) {
+            if (isAnimating) {
+                cancelAnimationFrame(animationId)
+            }
+            isAnimating = true
+
+            btnGenerate.disabled = true
+            btnSolve.disabled = true
+            updateStatus("solving", "경로 이동 중...")
+
+            let currentStep = 0
+            const totalSteps = path.length
+            // Draw speed: scale speed depending on path length to make it run in ~1.5s
+            const stepsPerFrame = Math.max(0.12, totalSteps / 80)
+
+            function tick() {
+                if (!isAnimating) return
+
+                // Redraw maze
+                drawMaze(currentGrid)
+
+                // Save state and translate for padding
+                ctx.save()
+                ctx.translate(PADDING, PADDING)
+
+                // Draw path up to currentStep
+                ctx.beginPath()
+                ctx.moveTo(path[0].col * CELL + CELL / 2, path[0].row * CELL + CELL / 2)
+
+                const limit = Math.floor(currentStep)
+                for (let i = 1; i <= limit && i < totalSteps; i++) {
+                    ctx.lineTo(path[i].col * CELL + CELL / 2, path[i].row * CELL + CELL / 2)
+                }
+
+                // Smooth linear interpolation for the active segment
+                if (currentStep < totalSteps - 1) {
+                    const currentIdx = Math.floor(currentStep)
+                    const nextIdx = currentIdx + 1
+                    const ratio = currentStep - currentIdx
+
+                    const currX = path[currentIdx].col * CELL + CELL / 2
+                    const currY = path[currentIdx].row * CELL + CELL / 2
+                    const nextX = path[nextIdx].col * CELL + CELL / 2
+                    const nextY = path[nextIdx].row * CELL + CELL / 2
+
+                    const interX = currX + (nextX - currX) * ratio
+                    const interY = currY + (nextY - currY) * ratio
+
+                    ctx.lineTo(interX, interY)
+                }
+
+                ctx.strokeStyle = "#39ff14" // Neon green route
+                ctx.lineWidth = Math.max(3, CELL * 0.12)
+                ctx.lineCap = "round"
+                ctx.lineJoin = "round"
+                ctx.shadowColor = "rgba(57, 255, 20, 0.65)"
+                ctx.shadowBlur = Math.max(6, CELL * 0.18)
+                ctx.stroke()
+
+                ctx.shadowBlur = 0
+
+                // Redraw Start/End indicators on top of path
+                drawStartEnd(currentGrid.length, currentGrid[0].length)
+
+                // Draw moving light-cycle particle at path lead
+                if (currentStep < totalSteps) {
+                    const currentIdx = Math.min(Math.floor(currentStep), totalSteps - 1)
+                    const hx = path[currentIdx].col * CELL + CELL / 2
+                    const hy = path[currentIdx].row * CELL + CELL / 2
+
+                    ctx.shadowColor = "#39ff14"
+                    ctx.shadowBlur = 10
+                    ctx.fillStyle = "#ffffff"
+                    ctx.beginPath()
+                    ctx.arc(hx, hy, Math.max(3.5, CELL * 0.08), 0, 2 * Math.PI)
+                    ctx.fill()
+                    ctx.shadowBlur = 0
+                }
+
+                ctx.restore()
+
+                currentStep += stepsPerFrame
+
+                if (currentStep < totalSteps) {
+                    animationId = requestAnimationFrame(tick)
+                } else {
+                    // Animation complete: draw full path
+                    drawCompletePath(path)
+                    isAnimating = false
+                    btnGenerate.disabled = false
+                    btnSolve.disabled = false
+                    updateStatus("solved", "탐색 성공!")
+                    statPath.innerText = `${totalSteps} 단계`
+                }
+            }
+
+            tick()
+        }
+
+        function drawCompletePath(path) {
+            drawMaze(currentGrid)
+
+            ctx.save()
+            ctx.translate(PADDING, PADDING)
+
+            ctx.beginPath()
+            ctx.moveTo(path[0].col * CELL + CELL / 2, path[0].row * CELL + CELL / 2)
+            for (let i = 1; i < path.length; i++) {
+                ctx.lineTo(path[i].col * CELL + CELL / 2, path[i].row * CELL + CELL / 2)
+            }
+
+            ctx.strokeStyle = "#39ff14"
+            ctx.lineWidth = Math.max(3, CELL * 0.12)
+            ctx.lineCap = "round"
+            ctx.lineJoin = "round"
+            ctx.shadowColor = "rgba(57, 255, 20, 0.65)"
+            ctx.shadowBlur = Math.max(6, CELL * 0.18)
+            ctx.stroke()
+
+            ctx.shadowBlur = 0
+            drawStartEnd(currentGrid.length, currentGrid[0].length)
+
+            ctx.restore()
+        }
+
+        // Initialize automatically on load
+        loadMaze()
+    </script>
+</body>
+
+</html>
