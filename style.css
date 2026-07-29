@@ -420,3 +420,23 @@ footer a {
 footer a:hover {
     color: var(--neon-cyan);
 }
+
+/* Custom Dropdown Select styling */
+select {
+    width: 100%;
+    background: rgba(8, 10, 15, 0.8);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: 1rem;
+    padding: 0.75rem 1rem;
+    outline: none;
+    transition: var(--transition-smooth);
+    cursor: pointer;
+}
+
+select:focus {
+    border-color: var(--neon-cyan);
+    box-shadow: 0 0 10px rgba(0, 240, 255, 0.2);
+}
