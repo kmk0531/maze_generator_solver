@@ -1,13 +1,27 @@
+import os
+from pathlib import Path
+import random
+import numpy as np
 import uvicorn
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
-import numpy as np
-import random
+from fastapi.responses import FileResponse
 
 # 우리가 구현한 어댑터 및 탐색 알고리즘 임포트
 from dfs_adapter import solve_maze_user_bfs, solve_maze_user_dfs
 
 app = FastAPI()
+
+BASE_DIR = Path(__file__).resolve().parent
+
+@app.get("/")
+def read_root():
+    return FileResponse(BASE_DIR / "index.html")
+
+@app.get("/style.css")
+def read_css():
+    return FileResponse(BASE_DIR / "style.css", media_type="text/css")
+
 
 # index.html이 로컬 브라우저(file://)로 열려도 CORS 허용되도록 설정
 app.add_middleware(
@@ -119,4 +133,6 @@ def solve_maze(rows: int = 10, cols: int = 10, algo: str = "bfs"):
     return {"path": web_path}
 
 if __name__ == "__main__":
-    uvicorn.run("server:app", host="127.0.0.1", port=8000, reload=True)
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("server:app", host="0.0.0.0", port=port, reload=True)
+
