@@ -61,7 +61,7 @@ if __name__ == "__main__":
     result_path = solve_maze(sample_maze, start_point, end_point)
     
     if not result_path:
-        
+        print("No path found")
     else:
         for r, c in result_path:
             sample_maze[r][c] = 'O'

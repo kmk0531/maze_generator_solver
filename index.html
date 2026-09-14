@@ -94,7 +94,10 @@
     </div>
 
     <script>
-        const BASE = "http://localhost:8000"
+        // 배포 환경 및 로컬 웹 서버에서는 현재 호스트(origin)를 사용하고, 로컬 file:// 로 직접 열었을 때는 8000번 포트로 폴백
+        const BASE = (window.location.protocol.startsWith("http")) 
+            ? window.location.origin 
+            : "http://localhost:8000";
         let CELL = 40  // Dynamic pixel size for each cell
         const PADDING = 8  // Padding around maze to prevent clipping borders/shadows
         const canvas = document.getElementById("canvas")

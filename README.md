@@ -10,23 +10,25 @@
 maze_generator_solver/
 ├── index.html                  # 웹 프론트엔드 UI
 ├── style.css                   # 웹 스타일시트
-├── server.py                   # FastAPI 백엔드 웹 서버
+├── server.py                   # FastAPI 백엔드 & 웹 정적 파일 서빙
 ├── map.py                      # OpenCV 기반 로컬 GUI 시각화 & 테스트베드
 ├── dfs_adapter.py              # 탐색 알고리즘 어댑터
 ├── DFS_backtracking_ver2.py    # DFS 백트래킹 미로 풀이 알고리즘
 ├── dfs_tracking.py             # 탐색 경로 추적 유틸리티
+├── requirements.txt            # 웹 서버 배포 의존성 목록
+├── Procfile                    # 클라우드 PaaS 배포 설정 파일
 └── README.md                   # 프로젝트 문서
 ```
 
 ---
 
-## 🚀 실행 방법
+## 🚀 실행 및 배포 방법
 
-### 1. 웹 어플리케이션 실행 (FastAPI + HTML)
+### 1. 로컬 웹 어플리케이션 실행 (FastAPI + HTML)
 
 1. **필수 라이브러리 설치**
    ```bash
-   pip install fastapi uvicorn numpy opencv-python
+   pip install -r requirements.txt
    ```
 
 2. **백엔드 서버 실행**
@@ -35,8 +37,19 @@ maze_generator_solver/
    # 또는 uvicorn server:app --reload --port 8000
    ```
 
-3. **웹 화면 열기**
-   - 브라우저에서 `index.html` 파일을 직접 열거나 Live Server를 이용해 접속합니다.
+3. **웹 화면 접속**
+   - 브라우저에서 `http://localhost:8000` 으로 접속합니다. (또는 `index.html` 직접 열기 지원)
+
+---
+
+### 2. 클라우드 무료 배포 (Render 기준)
+
+1. 저장소를 GitHub에 Push합니다.
+2. [Render](https://render.com)에 로그인 후 **New +** > **Web Service**를 클릭하고 저장소를 연결합니다.
+3. 설정값:
+   - **Build Command**: `pip install -r requirements.txt`
+   - **Start Command**: `uvicorn server:app --host 0.0.0.0 --port $PORT` (또는 Procfile 자동 감지)
+4. 생성 완료 후 발급되는 `https://<service-name>.onrender.com` 주소로 즉시 접속 가능합니다.
 
 ---
 
